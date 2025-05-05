@@ -161,7 +161,7 @@ namespace Intervals_API
     // Project
     public class RootProject
     {
-        public Project[] taskProject { get; set; }
+        public Project[] project { get; set; }
     }
     public class Project
     {
@@ -169,6 +169,7 @@ namespace Intervals_API
         public string name { get; set; }
         public string datestart { get; set; }
         public string dateend { get; set; }
+        public string clientid { get; set; }
         public string client { get; set; }
         public string clientlocalid { get; set; }
         public string labelid { get; set; }
@@ -205,6 +206,9 @@ namespace Intervals_API
                 case "Status":
                     Interval_Status();
                     break;
+                case "Project":
+                    Interval_Project();
+                    break;
                 default:
                     break;
             }
@@ -214,9 +218,9 @@ namespace Intervals_API
             //Interval_Client();
             //Interval_Module();
             //Interval_Priority();
-            //Interval_Status();;
+            //Interval_Status();
+            //Interval_Project();
         }
-
         
         static void Interval_Person()
         {
@@ -840,6 +844,102 @@ namespace Intervals_API
 
             }
 
+        }
+
+        static void Interval_Project()
+        {
+            string currentDateTime = DateTime.Now.ToString("yyyyMMddHHmmss");
+            string logFolder = @"D:\VS\Intervals_API\Logs";
+            string txtFile = @"D:\VS\Intervals_API\Txt\txt.json";
+            string userAccessKey = Convert.ToBase64String(System.Text.ASCIIEncoding.ASCII.GetBytes("2dudc9px45t:x"));
+            string APIAddress = "https://api.myintervals.com/project/?limit=70000";
+            string sqlServer = "MDCFAK01";
+            string sqlDatabase = "Intervals_Stats";
+            int insertSQL = 1;
+            int writeFile = 0;
+
+            try
+            {
+                ServicePointManager.Expect100Continue = true;
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
+                var json = "";
+
+                using (WebClient wc = new WebClient())
+                {
+                    // Basic Auth
+                    wc.Headers.Add("Accept", "application/json");
+                    wc.Headers.Add(HttpRequestHeader.Authorization, "Basic " + userAccessKey);
+                    json = wc.DownloadString(APIAddress);
+
+
+                    // Json to txt file                   
+                    if (writeFile == 1)
+                    {
+                        File.WriteAllText(txtFile, json);
+                    }
+
+                    // Json to class object
+                    var jsonNullHandling = new JsonSerializerSettings
+                    {
+                        NullValueHandling = NullValueHandling.Ignore,
+                        MissingMemberHandling = MissingMemberHandling.Ignore
+                    };
+                    RootProject rootProject = JsonConvert.DeserializeObject<RootProject>(json, jsonNullHandling);
+
+
+                    // Class object loop   
+                    foreach (Project project in rootProject.project)
+                    {
+                        if (insertSQL == 0)
+                        {
+                            // TEST >>
+                            Console.WriteLine("id:" + project.id);
+                            Console.WriteLine("name:" + project.name);
+                            // TEST <<
+                        }
+
+                        if (insertSQL == 1)
+                        {
+                            string connectionString = @"Data Source = " + sqlServer + "; Initial Catalog = " + sqlDatabase + "; Integrated Security = True; ";
+                            using (SqlConnection connection = new SqlConnection(connectionString))
+                            {
+                                // Open connection
+                                connection.Open();
+
+                                // Create the insert statement
+                                string insertStatement =
+                                     "INSERT INTO [int].[Project](" +
+                                        "[id],[name],[datestart],[dateend]," +
+                                        "[clientid],[client],[clientlocalid],[labelid]," +
+                                        "[label],[localid],[manager],[managerid]" +
+                                        ")" +
+                                    "VALUES('" +
+                                        project.id + "', '" + project.name.Replace("'", "''") + "', '" + project.datestart + "', '" + project.dateend + "', '" +
+                                        project.clientid + "', '" + project.client + "', '" + project.clientlocalid + "', '" + project.labelid + "', '" +
+                                        project.label + "', '" + project.localid + "', '" + project.manager + "', '" + project.managerid + "')";
+
+
+                                // Create a SqlCommand object with the insert statement and the SqlConnection object
+                                SqlCommand command = new SqlCommand(insertStatement, connection);
+
+                                // Execute the insert command
+                                int rowsAffected = command.ExecuteNonQuery();
+
+                            }
+                        }
+                    }
+                }
+            }
+
+            catch (Exception exception)
+            {
+                using (StreamWriter sw = File.CreateText(logFolder + "\\" + "ErrorLog " + currentDateTime + ".log"))
+                {
+                    sw.WriteLine(exception.ToString());
+                }
+
+            }
         }
     }
 
